@@ -1,0 +1,47 @@
+# SPDX-FileCopyrightText: 2026 Veydan Project
+# SPDX-License-Identifier: LicenseRef-PolyForm-Perimeter-1.0.1
+
+[package]
+name = "veydannotes"
+version = "5.0.0"
+description = "Notes, folders, tags, attachments, history, templates and quick capture"
+authors = ["Veydan Project"]
+edition = "2021"
+license-file = "../../LICENSE"
+publish = false
+
+[lib]
+# One library for every platform: desktop main.rs and the Android bootstrap load it.
+name = "veydan_notes_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+# The product crate names what tauri-build and generate_context! read
+# (docs/platform-spec.md 5.5): tauri with the features of its config,
+# serde_json for the `plugins` section, every plugin its capabilities name.
+[dependencies]
+# Attachments are served to the page through the asset protocol.
+tauri = { version = "2", features = ["protocol-asset"] }
+serde_json = "1"
+# The module contract, the command router, the app builder, the tray frame.
+veydan-shell = { path = "../../crates/shell" }
+# The module Notes: note files, their index, attachments and their sync.
+veydan-notes = { path = "../../crates/notes" }
+
+# ── Desktop only: the plugins the shell registers ────────────────────────────
+[target.'cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))'.dependencies]
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+tauri-plugin-single-instance = "2"
+# Open http(s) links in the system browser without going through a shell
+tauri-plugin-opener = "2"
+
+# ── Mobile only ──────────────────────────────────────────────────────────────
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+# Native file picker (content:// URIs) and fd-based reads of those URIs.
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"

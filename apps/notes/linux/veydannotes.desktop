@@ -1,0 +1,10 @@
+[Desktop Entry]
+Categories=Office;Utility;
+Comment=Notes, folders, tags and attachments
+Exec={{exec}} %U
+Icon={{icon}}
+Name={{name}}
+StartupNotify=true
+StartupWMClass={{exec}}
+Terminal=false
+Type=Application

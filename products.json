@@ -1,0 +1,44 @@
+{
+  "$comment": "Veydan Notes: the modules of the product and the product itself. This file is written for the published snapshot (\"snapshot\" names its product): scripts/boundaries.sh checks what is here, ui/vite-veydan-modules.js builds the UI from the modules, scripts/product.sh gives the wrappers of the Tauri CLI the crate, the identifiers and the ports. A dev server does not notice an edit: restart it.",
+  "snapshot": "notes",
+  "modules": {
+    "notes": {
+      "ui": "ui/src/lib/notes",
+      "routes": [
+        "ui/src/routes/notes",
+        "ui/src/routes/(desktop)/notes",
+        "ui/src/routes/(mobile)/notes",
+        "ui/src/routes/(mobile)/search"
+      ],
+      "crates": [
+        "crates/notes"
+      ]
+    }
+  },
+  "targets": {
+    "notes": {
+      "kind": "product",
+      "app": "apps/notes",
+      "tagline": {
+        "en": "Notes with end-to-end encrypted sync.",
+        "ru": "Заметки с синхронизацией и сквозным шифрованием."
+      },
+      "modules": [
+        "notes"
+      ],
+      "identifier": "net.veydan.notes",
+      "repo": "veydanproject/Veydan-Notes",
+      "public": true,
+      "devPort": 1440,
+      "androidDevPort": 1450,
+      "plugins": [
+        "dialog",
+        "fs",
+        "updater",
+        "process",
+        "single-instance",
+        "opener"
+      ]
+    }
+  }
+}
