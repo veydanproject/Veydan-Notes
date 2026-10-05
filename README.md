@@ -2,7 +2,7 @@
 
 > Notes with end-to-end encrypted sync.
 
-This repository holds the sources of **Veydan Notes 5.0.0** and its releases.
+This repository holds the sources of **Veydan Notes 5.0.1** and its releases.
 It is a snapshot: the product is developed together with the other Veydan
 apps, and each release is published here as one commit with the tag
 `v<version>`. Nobody commits here by hand, so pull requests cannot be merged
