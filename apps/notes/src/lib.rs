@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2026 Veydan Project
 // SPDX-License-Identifier: LicenseRef-PolyForm-Perimeter-1.0.1
 
-//! Veydan Notes: the product crate (docs/platform-spec.md 13.1). It holds
+//! Veydan Notes: the product crate (internal/platform-spec.md 13.1). It holds
 //! the Tauri config, the strings of the product and the list of its
 //! modules — one, the crate of notes; `veydan_shell` starts it, and the
 //! plan of its sync is the shell's default over what the module registers
