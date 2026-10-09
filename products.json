@@ -21,7 +21,20 @@
       "app": "apps/notes",
       "tagline": {
         "en": "Notes with end-to-end encrypted sync.",
-        "ru": "Заметки с синхронизацией и сквозным шифрованием."
+        "ru": "Заметки с синхронизацией и сквозным шифрованием.",
+        "uk": "Нотатки із синхронізацією та наскрізним шифруванням.",
+        "de": "Notizen mit Ende-zu-Ende-verschlüsselter Synchronisierung.",
+        "es": "Notas con sincronización cifrada de extremo a extremo.",
+        "fr": "Notes avec synchronisation chiffrée de bout en bout.",
+        "it": "Note con sincronizzazione crittografata end-to-end.",
+        "pl": "Notatki z synchronizacją szyfrowaną end-to-end.",
+        "pt-BR": "Notas com sincronização criptografada de ponta a ponta.",
+        "tr": "Uçtan uca şifreli eşitlemeyle notlar.",
+        "id": "Catatan dengan sinkronisasi terenkripsi ujung ke ujung.",
+        "vi": "Ghi chú với đồng bộ được mã hóa đầu cuối.",
+        "zh-CN": "端到端加密同步的笔记。",
+        "ja": "エンドツーエンドで暗号化された同期を備えたノート。",
+        "ko": "종단간 암호화 동기화를 지원하는 노트."
       },
       "modules": [
         "notes"
