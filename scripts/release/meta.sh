@@ -2,25 +2,34 @@
 # SPDX-FileCopyrightText: 2026 Veydan Project
 # SPDX-License-Identifier: LicenseRef-PolyForm-Perimeter-1.0.1
 #
-# What a tag asks the release workflow for (internal/platform-spec.md 14.1, 14.3):
+# What a tag asks a release workflow for (docs/ci-cd.md, "Releases";
+# internal/platform-spec.md 14.1, 14.3). Two workflows run it:
 #
-#   GITHUB_REF_TYPE=tag GITHUB_REF_NAME=notes-v5.0.0-alpha.1 \
-#   GITHUB_REPOSITORY=<owner>/<repo> GITHUB_OUTPUT=<file> scripts/release/meta.sh
+#   - the release.yml of a product's repository on GitHub (its snapshot):
+#       GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v5.1.13-rc.1 GITHUB_REPOSITORY=veydanproject/Veydan-Chat
+#     → kind=own: build the desktop platforms the tag names (all three when
+#       none) and put them into a DRAFT release under that tag. Android is
+#       never built there, and vX.Y.Z (a release) builds nothing: Gitea
+#       promotes the files of its release candidate;
+#   - the release workflow of veydanproject/release on Gitea, over a
+#     checkout of the monorepo at the tag:
+#       RELEASE_BUILDER=gitea GITHUB_REF_TYPE=tag GITHUB_REF_NAME=chat-v5.1.13-rc.1 GITHUB_REPOSITORY=veydanproject/monorepo
+#     → kind=channel: build Android when the tag asks for it, wait for the
+#       draft of GitHub when it asks for desktop platforms, assemble
+#       latest.json and publish a PRERELEASE under release_tag in the
+#       product's repository;
+#       … GITHUB_REF_NAME=chat-v5.1.13 FROM=chat-v5.1.13-rc.1
+#     → kind=release: nothing is built; the files of from_tag become the
+#       release vX.Y.Z of the product's repository (build once, promote).
 #
-# The job `meta` of .github/workflows/release.yml runs it; by hand it prints
-# the same lines (GITHUB_OUTPUT=/dev/stdout). It reads products.json and the
-# product's crate, calls nothing and writes nothing but the outputs.
+# The grammar (14.1): <product>-vX.Y.Z[-<channel>.N[-<platform>]…] in the
+# monorepo, the same without the product in its repository; channel is
+# alpha, beta or rc; platforms are linux, windows, macos, android, ios,
+# each at most once; none means the three desktop ones plus android.
 #
-#   <product>-vX.Y.Z                              kind=release: every platform,
-#                                                 published in the product's
-#                                                 repository under vX.Y.Z
-#   <product>-vX.Y.Z-<channel>.N[-<platform>]…    kind=channel: the platforms
-#                                                 named or the three desktop
-#                                                 ones, a prerelease of THIS
-#                                                 repository under the tag itself
-#
-# A channel build gets no `product_repo`: nothing after this job can address
-# the product's repository for it.
+# By hand: GITHUB_OUTPUT=/dev/stdout prints the outputs. It reads
+# products.json and the product's crate, calls nothing and writes nothing
+# but the outputs.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -35,104 +44,100 @@ fail() {
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY must name the repository of the run}"
 
 PRODUCTS="$(jq -r '.targets | to_entries[] | select(.value.kind == "product") | .key' products.json | xargs)"
+OWN_PRODUCTS="$(jq -r '[.targets | to_entries[] | select(.value.kind == "product")] | length' products.json)"
+BUILDER="${RELEASE_BUILDER:-github}"
+FROM="${FROM:-}"
 
 if [ "${GITHUB_REF_TYPE:-}" != "tag" ]; then
-  fail "Run a release on a product tag (<product>-vX.Y.Z…), not on the branch ${GITHUB_REF_NAME:-}: make push <product> … starts it"
+  fail "Run a release on a tag, not on the branch ${GITHUB_REF_NAME:-}: make push <product> … starts it"
+fi
+TAG="${GITHUB_REF_NAME:-}"
+
+# The tag with the product in front, as the monorepo names it.
+if [ "$OWN_PRODUCTS" = "1" ] && [ "$BUILDER" = "github" ]; then
+  [[ "$TAG" =~ ^v ]] || fail "$TAG: a tag of a product's repository has no product prefix (vX.Y.Z-rc.N…)"
+  FULL="$PRODUCTS-$TAG"
+  OWN="true"
+elif [ "$BUILDER" = "gitea" ]; then
+  FULL="$TAG"
+  OWN="false"
+else
+  fail "$TAG: the monorepo builds nothing on GitHub; a channel build is started by make push <product> alpha|beta|rc and runs on Gitea and in the product's repository"
 fi
 
-TAG="${GITHUB_REF_NAME:-}"
-# In the product's own repository (its snapshot: products.json holds one
-# product) the tag is vX.Y.Z: a release built and published right there.
-OWN_PRODUCTS="$(jq -r '[.targets | to_entries[] | select(.value.kind == "product")] | length' products.json)"
-if [ "$OWN_PRODUCTS" = "1" ] && [[ "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-  TAG="$PRODUCTS-$TAG"
-  OWN="true"
-else
-  OWN="false"
-fi
-if [[ "$TAG" =~ ^([a-z]+)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+CHANNEL_RE='^([a-z]+)-v([0-9]+\.[0-9]+\.[0-9]+)-(alpha|beta|rc)\.([0-9]+)((-(linux|windows|macos|android|ios))*)$'
+RELEASE_RE='^([a-z]+)-v([0-9]+\.[0-9]+\.[0-9]+)$'
+if [[ "$FULL" =~ $CHANNEL_RE ]]; then
   PRODUCT="${BASH_REMATCH[1]}"
   VERSION="${BASH_REMATCH[2]}"
-  KIND="release"
-  CHANNEL="stable"
-  PRERELEASE="false"
-  PLATFORMS="linux windows macos android"
-elif [[ "$TAG" =~ ^([a-z]+)-v([0-9]+\.[0-9]+\.[0-9]+)-(alpha|beta|rc)\.([0-9]+)((-(linux|windows|macos|android|ios))*)$ ]]; then
-  PRODUCT="${BASH_REMATCH[1]}"
-  VERSION="${BASH_REMATCH[2]}"
-  KIND="channel"
   CHANNEL="${BASH_REMATCH[3]}"
+  KIND="channel"
   PRERELEASE="true"
   SUFFIX="${BASH_REMATCH[5]}"
   if [ -z "$SUFFIX" ]; then
-    PLATFORMS="linux windows macos"
+    PLATFORMS="linux windows macos android"
   else
     # shellcheck disable=SC2086
     PLATFORMS="$(echo ${SUFFIX//-/ })"
-    # Twice the same platform would make two jobs that upload one artifact.
     seen=" "
     for p in $PLATFORMS; do
       case "$seen" in
-        *" $p "*) fail "$TAG names $p twice" ;;
+        *" $p "*) fail "$FULL names $p twice" ;;
       esac
       seen="$seen$p "
     done
   fi
+elif [[ "$FULL" =~ $RELEASE_RE ]]; then
+  PRODUCT="${BASH_REMATCH[1]}"
+  VERSION="${BASH_REMATCH[2]}"
+  CHANNEL="stable"
+  KIND="release"
+  PRERELEASE="false"
+  PLATFORMS=""
+  if [ "$OWN" = "true" ]; then
+    fail "$TAG: a release is promoted by Gitea from its release candidate (make push $PRODUCT release); the repository of a product builds channel tags alone"
+  fi
+  [ -n "$FROM" ] || fail "$TAG: a release names the release candidate it promotes (FROM=<product>-vX.Y.Z-rc.N)"
+  [[ "$FROM" =~ ^${PRODUCT}-v${VERSION//./\\.}-rc\.[0-9]+$ ]] || fail "$TAG: FROM=$FROM is not a release candidate of $PRODUCT $VERSION with every platform (<product>-vX.Y.Z-rc.N)"
 else
-  fail "Tag $TAG does not match <product>-vX.Y.Z or <product>-vX.Y.Z-(alpha|beta|rc).N[-linux|-windows|-macos|-android|-ios...]"
+  fail "Tag $FULL does not match <product>-vX.Y.Z or <product>-vX.Y.Z-(alpha|beta|rc).N[-linux|-windows|-macos|-android|-ios...]"
 fi
 case " $PRODUCTS " in
   *" $PRODUCT "*) ;;
-  *) fail "$TAG: '$PRODUCT' is not a product of products.json ($PRODUCTS)" ;;
+  *) fail "$FULL: '$PRODUCT' is not a product of products.json ($PRODUCTS)" ;;
 esac
 
 APP="$(jq -r --arg p "$PRODUCT" '.targets[$p].app' products.json)"
 REPO="$(jq -r --arg p "$PRODUCT" '.targets[$p].repo' products.json)"
+if [ "$OWN" = "true" ] && [ "$GITHUB_REPOSITORY" != "$REPO" ]; then
+  fail "$TAG is a tag of the repository $REPO of $PRODUCT, not of $GITHUB_REPOSITORY"
+fi
 FILE_VERSION="$(tr -d '[:space:]' < "$APP/VERSION")"
 CONF_VERSION="$(jq -r .version "$APP/tauri.conf.json")"
 if [ "$VERSION" != "$FILE_VERSION" ] || [ "$VERSION" != "$CONF_VERSION" ]; then
   fail "Tag version $VERSION does not match $APP/VERSION ($FILE_VERSION) and tauri.conf.json ($CONF_VERSION)"
 fi
 # The updater of an installed product reads the latest.json of the product's
-# own repository, whatever built it: a channel build too (14.3).
+# own repository, whatever built it.
 ENDPOINT="$(jq -r '.plugins.updater.endpoints[0]' "$APP/tauri.conf.json")"
 if [ "$ENDPOINT" != "https://github.com/$REPO/releases/latest/download/latest.json" ]; then
   fail "$APP/tauri.conf.json: the updater endpoint $ENDPOINT is not the one of $REPO"
 fi
 PRODUCT_NAME="$(jq -r .productName "$APP/tauri.conf.json")"
 # The public half of the updater key: scripts/release/assets.mjs checks that
-# every signature of the build was made by its private half (the secret).
+# every signature of a build was made by its private half.
 UPDATER_PUBKEY="$(jq -r '.plugins.updater.pubkey // empty' "$APP/tauri.conf.json")"
 [ -n "$UPDATER_PUBKEY" ] || fail "$APP/tauri.conf.json: no plugins.updater.pubkey"
-# GitHub stores a space of an asset name as a dot; scripts/release/assets.mjs
-# names the assets so before they are uploaded.
+# GitHub stores a space of an asset name as a dot.
 ASSET_PREFIX="${PRODUCT_NAME// /.}"
 LIB_NAME="$(sed -n '/^\[lib\]/,/^\[/s/^name = "\(.*\)"/\1/p' "$APP/Cargo.toml" | head -n1)"
 MESSENGER="$(jq -r --arg p "$PRODUCT" '.targets[$p].modules | index("messenger") != null' products.json)"
 
-if [ "$OWN" = "true" ]; then
-  # The snapshot publishes its own release, under its own tag (vX.Y.Z).
-  [ "$GITHUB_REPOSITORY" = "$REPO" ] || fail "$GITHUB_REF_NAME: a vX.Y.Z tag is a release of the product repository $REPO, not of $GITHUB_REPOSITORY"
-  KIND="own"
-  PUBLISH_REPO="$REPO"
-  PRODUCT_REPO=""
-  RELEASE_TAG="$GITHUB_REF_NAME"
-elif [ "$KIND" = "release" ]; then
-  fail "$TAG: a release is built by $REPO from its snapshot (make push $PRODUCT release publishes it there); the tag of the monorepo only marks the commit"
-  # In the product's repository the tag has no prefix: v5.0.0.
-  PUBLISH_REPO="$REPO"
-  PRODUCT_REPO="$REPO"
-  RELEASE_TAG="${TAG#"$PRODUCT"-}"
-else
-  # A channel build stays here, under the tag that was pushed.
-  PUBLISH_REPO="$GITHUB_REPOSITORY"
-  PRODUCT_REPO=""
-  RELEASE_TAG="$TAG"
-  if [ "$PUBLISH_REPO" = "$REPO" ]; then
-    fail "$TAG: a channel build is published in the repository it is built in, and this one is the product's own ($REPO), which takes releases only"
-  fi
-fi
-RELEASE_NAME="$PRODUCT_NAME ${TAG#"$PRODUCT"-}"
+# Every release lives in the product's repository, under the tag without the product.
+PUBLISH_REPO="$REPO"
+RELEASE_TAG="${FULL#"$PRODUCT"-}"
+FROM_TAG="${FROM#"$PRODUCT"-}"
+RELEASE_NAME="$PRODUCT_NAME ${RELEASE_TAG}"
 
 include='[]'
 add() {
@@ -168,8 +173,13 @@ for p in $PLATFORMS; do
       ;;
   esac
 done
-if [ "$BUILD_DESKTOP" != "true" ] && [ "$BUILD_ANDROID" != "true" ]; then
+if [ "$KIND" = "channel" ] && [ "$BUILD_DESKTOP" != "true" ] && [ "$BUILD_ANDROID" != "true" ]; then
   fail "No platforms to build"
+fi
+# In the product's repository on GitHub only the desktop is built.
+if [ "$OWN" = "true" ]; then
+  BUILD_ANDROID="false"
+  [ "$BUILD_DESKTOP" = "true" ] || fail "$TAG asks for no desktop platform: nothing for this repository to build (Android is built on Gitea)"
 fi
 # A matrix may not be empty; the job that reads it is skipped then.
 if [ "$include" = "[]" ]; then
@@ -179,15 +189,17 @@ fi
 keys="$(echo $keys)"
 MATRIX=$(jq -c '{include:.}' <<<"$include")
 
-echo "product=$PRODUCT  version=$VERSION  kind=$KIND  channel=$CHANNEL  platforms=$PLATFORMS  → $PUBLISH_REPO $RELEASE_TAG" >&2
+echo "product=$PRODUCT  version=$VERSION  kind=$KIND  channel=$CHANNEL  platforms=$PLATFORMS  → $PUBLISH_REPO $RELEASE_TAG${FROM_TAG:+ from $FROM_TAG}" >&2
 {
   echo "product=$PRODUCT"
   echo "version=$VERSION"
   echo "kind=$KIND"
   echo "channel=$CHANNEL"
+  echo "own=$OWN"
   echo "release_tag=$RELEASE_TAG"
   echo "release_name=$RELEASE_NAME"
-  echo "product_repo=$PRODUCT_REPO"
+  echo "from_tag=$FROM_TAG"
+  echo "product_repo=$PUBLISH_REPO"
   echo "product_name=$PRODUCT_NAME"
   echo "asset_prefix=$ASSET_PREFIX"
   echo "messenger=$MESSENGER"

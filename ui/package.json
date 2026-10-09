@@ -5,6 +5,7 @@
   "description": "Notes with end-to-end encrypted sync.",
   "author": "Veydan Project",
   "type": "module",
+  "packageManager": "pnpm@12.4.2",
   "scripts": {
     "dev": "node ../scripts/ui.mjs notes dev",
     "build": "node ../scripts/ui.mjs notes build",

@@ -9,6 +9,7 @@
 //
 //   assets.mjs collect --bundle <dir> --name "Veydan Notes" --version 5.0.0 [--target <triple>] --pubkey <key> --out <dir>
 //   assets.mjs latest  --dir <dir> --prefix Veydan.Notes --version 5.0.0 --keys "linux-x86_64 …" --base-url <url>
+//   assets.mjs verify  --dir <dir> --prefix Veydan.Notes --version 5.0.0 --keys "linux-x86_64 …" --pubkey <key>
 //
 // collect: <dir> is cargo's `…/release/bundle`. It takes the installers and
 // the updater signatures of this product and this version only — the target
@@ -27,6 +28,12 @@
 //
 // latest: the latest.json of the Tauri updater for the platforms in --keys,
 // each with the signature of its bundle and <base-url>/<bundle>.
+//
+// verify: the files of <dir> taken from elsewhere (the draft release GitHub
+// built): every file is a bundle of this product and version, every
+// signature was made by --pubkey over the bundle beside it, and every
+// platform of --keys has its signed bundle. The release workflow of Gitea
+// runs it before it publishes anything (docs/ci-cd.md).
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -168,6 +175,39 @@ export function latest({ dir, prefix, version, keys, baseUrl, now = new Date() }
   };
 }
 
+/**
+ * What is wrong with the files of `dir` as a set of bundles of the product:
+ * a foreign file, a signature of nothing, a wrong signature, a platform
+ * of `keys` without a signed bundle. Empty when all is well.
+ */
+export function verify({ dir, prefix, version, keys, pubkey }) {
+  const problems = [];
+  const pub = parsePublicKey(pubkey ?? '');
+  const names = fs.readdirSync(dir).sort();
+  for (const n of names) {
+    if (n === 'latest.json') continue;
+    if (!(n.startsWith(`${prefix}_${version}_`) || n.startsWith(`${prefix}-${version}-`))) problems.push(`${n}: not a bundle of ${prefix} ${version}`);
+  }
+  for (const sig of names.filter((n) => n.endsWith('.sig'))) {
+    const bundle = sig.slice(0, -4);
+    if (!names.includes(bundle)) {
+      problems.push(`${sig}: the bundle it signs is missing`);
+      continue;
+    }
+    const problem = signatureProblem(fs.readFileSync(path.join(dir, bundle)), fs.readFileSync(path.join(dir, sig), 'utf8'), pub);
+    if (problem) problems.push(`${sig}: ${problem}`);
+  }
+  for (const key of keys) {
+    const patterns = UPDATER_BUNDLE[key];
+    if (!patterns) {
+      problems.push(`${key}: not a platform of the updater`);
+      continue;
+    }
+    if (!names.some((n) => patterns.some((p) => p.test(n)))) problems.push(`${key}: no signed bundle of ${prefix} ${version}`);
+  }
+  return problems;
+}
+
 function options(argv) {
   const out = {};
   for (let i = 0; i < argv.length; i += 2) {
@@ -192,8 +232,14 @@ function main([command, ...rest]) {
     const doc = latest({ dir: opts.dir, prefix: opts.prefix, version: opts.version, keys: opts.keys.split(/\s+/).filter(Boolean), baseUrl: opts['base-url'] });
     fs.writeFileSync(path.join(opts.dir, 'latest.json'), `${JSON.stringify(doc, null, 2)}\n`);
     console.log(`latest.json: ${opts.version}, ${Object.keys(doc.platforms).join(' ')}`);
+  } else if (command === 'verify') {
+    need(opts, 'dir', 'prefix', 'version', 'pubkey');
+    const problems = verify({ dir: opts.dir, prefix: opts.prefix, version: opts.version, keys: (opts.keys ?? '').split(/\s+/).filter(Boolean), pubkey: opts.pubkey });
+    for (const p of problems) console.error(`::error::${p}`);
+    if (problems.length) process.exit(1);
+    console.log(`verified: ${fs.readdirSync(opts.dir).length} files of ${opts.prefix} ${opts.version}`);
   } else {
-    throw new Error('usage: assets.mjs collect|latest … (see the head of the file)');
+    throw new Error('usage: assets.mjs collect|latest|verify … (see the head of the file)');
   }
 }
 

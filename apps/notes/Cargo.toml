@@ -3,7 +3,7 @@
 
 [package]
 name = "veydannotes"
-version = "5.0.4"
+version = "5.0.5"
 description = "Notes, folders, tags, attachments, history, templates and quick capture"
 authors = ["Veydan Project"]
 edition = "2021"
