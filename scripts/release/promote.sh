@@ -7,11 +7,13 @@
 # release of the product in its repository on GitHub (docs/ci-cd.md,
 # "Releases"; build once, promote many).
 #
-#   KIND=channel   the desktop bundles are in the DRAFT release GitHub made
-#                  under RELEASE_TAG (when BUILD_DESKTOP=true): wait for it,
-#                  take its files, check every signature against the public
-#                  key of the product; add what ASSETS_DIR holds (the APK);
-#                  publish the prerelease with latest.json
+#   KIND=channel   the Windows and macOS bundles are in the DRAFT release
+#                  GitHub made under RELEASE_TAG (when BUILD_DESKTOP=true):
+#                  wait for it to hold every platform of DRAFT_KEYS, take its
+#                  files, check every signature against the public key of
+#                  the product; add what ASSETS_DIR holds (the Linux bundles
+#                  and the APK built on Gitea); publish the prerelease with
+#                  latest.json over UPDATER_KEYS
 #   KIND=release   the files of the prerelease FROM_TAG (the release
 #                  candidate) become the release RELEASE_TAG: downloaded,
 #                  checked, published again with a latest.json that names
@@ -20,7 +22,8 @@
 #   REPO, RELEASE_TAG, RELEASE_NAME, ASSET_PREFIX, VERSION, UPDATER_KEYS, GH_TOKEN
 #                  as scripts/release/publish.sh reads them
 #   UPDATER_PUBKEY the public key of plugins.updater.pubkey
-#   BUILD_DESKTOP  channel: whether GitHub builds desktop bundles for this tag
+#   BUILD_DESKTOP  channel: whether GitHub builds Windows or macOS for this tag
+#   DRAFT_KEYS     channel: the platforms the draft must hold (windows-x86_64 darwin-…)
 #   ASSETS_DIR     channel: the files Gitea built (may be empty)
 #   WAIT_MINUTES   how long to wait for the draft (60)
 set -euo pipefail
@@ -35,6 +38,7 @@ fail() {
 : "${KIND:?}" "${REPO:?}" "${RELEASE_TAG:?}" "${RELEASE_NAME:?}" "${ASSET_PREFIX:?}" "${VERSION:?}" "${UPDATER_PUBKEY:?}"
 [ -n "${GH_TOKEN:-}" ] || fail "No token to publish $RELEASE_TAG in $REPO with"
 UPDATER_KEYS="${UPDATER_KEYS:-}"
+DRAFT_KEYS="${DRAFT_KEYS:-$UPDATER_KEYS}"
 ASSETS_DIR="${ASSETS_DIR:-release-assets}"
 WAIT_MINUTES="${WAIT_MINUTES:-60}"
 mkdir -p "$ASSETS_DIR"
@@ -53,7 +57,8 @@ download_release() {
   names="$(gh api "repos/$REPO/releases/$id" --jq '.assets[] | "\(.name)\t\(.id)"')"
   while IFS=$'\t' read -r n aid; do
     [ -n "$n" ] || continue
-    [ "$n" = "latest.json" ] && continue
+    # Written again over the files of the new release.
+    case "$n" in latest.json|SHA256SUMS) continue ;; esac
     gh api -H "Accept: application/octet-stream" "repos/$REPO/releases/assets/$aid" > "$dir/$n"
   done <<<"$names"
 }
@@ -68,7 +73,7 @@ case "$KIND" in
         ID="$(draft_of "$RELEASE_TAG")"
         if [ -n "$ID" ]; then
           rm -rf "$ASSETS_DIR/desktop" && download_release "$ID" "$ASSETS_DIR/desktop"
-          if node "$HERE/assets.mjs" verify --dir "$ASSETS_DIR/desktop" --prefix "$ASSET_PREFIX" --version "$VERSION" --keys "$UPDATER_KEYS" --pubkey "$UPDATER_PUBKEY" 2>/dev/null; then
+          if node "$HERE/assets.mjs" verify --dir "$ASSETS_DIR/desktop" --prefix "$ASSET_PREFIX" --version "$VERSION" --keys "$DRAFT_KEYS" --pubkey "$UPDATER_PUBKEY" 2>/dev/null; then
             break
           fi
           echo ">> the draft is there but not complete yet"
@@ -77,8 +82,12 @@ case "$KIND" in
         sleep 60
       done
       # Checked once more, loudly: a wrong signature stops the release here.
-      node "$HERE/assets.mjs" verify --dir "$ASSETS_DIR/desktop" --prefix "$ASSET_PREFIX" --version "$VERSION" --keys "$UPDATER_KEYS" --pubkey "$UPDATER_PUBKEY"
+      node "$HERE/assets.mjs" verify --dir "$ASSETS_DIR/desktop" --prefix "$ASSET_PREFIX" --version "$VERSION" --keys "$DRAFT_KEYS" --pubkey "$UPDATER_PUBKEY"
       mv "$ASSETS_DIR"/desktop/* "$ASSETS_DIR"/ && rmdir "$ASSETS_DIR/desktop"
+    fi
+    # Everything together — what GitHub built and what Gitea built — holds every platform of latest.json.
+    if [ -n "$UPDATER_KEYS" ]; then
+      node "$HERE/assets.mjs" verify --dir "$ASSETS_DIR" --prefix "$ASSET_PREFIX" --version "$VERSION" --keys "$UPDATER_KEYS" --pubkey "$UPDATER_PUBKEY"
     fi
     ;;
   release)

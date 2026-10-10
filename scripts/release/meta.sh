@@ -7,17 +7,18 @@
 #
 #   - the release.yml of a product's repository on GitHub (its snapshot):
 #       GITHUB_REF_TYPE=tag GITHUB_REF_NAME=v5.1.13-rc.1 GITHUB_REPOSITORY=veydanproject/Veydan-Chat
-#     → kind=own: build the desktop platforms the tag names (all three when
-#       none) and put them into a DRAFT release under that tag. Android is
-#       never built there, and vX.Y.Z (a release) builds nothing: Gitea
-#       promotes the files of its release candidate;
+#     → kind=own: build Windows and macOS when the tag names them (every
+#       platform when it names none) and put them into a DRAFT release under
+#       that tag. Linux and Android are never built there (Gitea builds them,
+#       on our runner), and vX.Y.Z (a release) builds nothing: Gitea promotes
+#       the files of its release candidate;
 #   - the release workflow of veydanproject/release on Gitea, over a
 #     checkout of the monorepo at the tag:
 #       RELEASE_BUILDER=gitea GITHUB_REF_TYPE=tag GITHUB_REF_NAME=chat-v5.1.13-rc.1 GITHUB_REPOSITORY=veydanproject/monorepo
-#     → kind=channel: build Android when the tag asks for it, wait for the
-#       draft of GitHub when it asks for desktop platforms, assemble
-#       latest.json and publish a PRERELEASE under release_tag in the
-#       product's repository;
+#     → kind=channel: build Linux and Android when the tag asks for them,
+#       wait for the draft of GitHub when it asks for Windows or macOS,
+#       assemble latest.json over every platform and publish a PRERELEASE
+#       under release_tag in the product's repository;
 #       … GITHUB_REF_NAME=chat-v5.1.13 FROM=chat-v5.1.13-rc.1
 #     → kind=release: nothing is built; the files of from_tag become the
 #       release vX.Y.Z of the product's repository (build once, promote).
@@ -144,25 +145,31 @@ add() {
   include=$(jq -c --arg p "$1" --arg a "$2" --arg t "$3" --arg n "$4" \
     '. + [{"platform":$p,"args":$a,"target":$t,"artifact":$n}]' <<<"$include")
 }
+# keys: every platform of latest.json; draft_keys: those GitHub builds into
+# the draft (Windows, macOS); build_desktop: whether GitHub builds anything;
+# build_linux, build_android: what Gitea builds.
 keys=""
+draft_keys=""
 BUILD_DESKTOP="false"
+BUILD_LINUX="false"
 BUILD_ANDROID="false"
 for p in $PLATFORMS; do
   case "$p" in
     linux)
-      add "ubuntu-22.04" "" "" "linux-x86_64"
       keys="$keys linux-x86_64"
-      BUILD_DESKTOP="true"
+      BUILD_LINUX="true"
       ;;
     windows)
       add "windows-latest" "" "" "windows-x86_64"
       keys="$keys windows-x86_64"
+      draft_keys="$draft_keys windows-x86_64"
       BUILD_DESKTOP="true"
       ;;
     macos)
       add "macos-latest" "--target aarch64-apple-darwin" "aarch64-apple-darwin" "darwin-aarch64"
       add "macos-latest" "--target x86_64-apple-darwin" "x86_64-apple-darwin" "darwin-x86_64"
       keys="$keys darwin-aarch64 darwin-x86_64"
+      draft_keys="$draft_keys darwin-aarch64 darwin-x86_64"
       BUILD_DESKTOP="true"
       ;;
     android)
@@ -173,13 +180,14 @@ for p in $PLATFORMS; do
       ;;
   esac
 done
-if [ "$KIND" = "channel" ] && [ "$BUILD_DESKTOP" != "true" ] && [ "$BUILD_ANDROID" != "true" ]; then
+if [ "$KIND" = "channel" ] && [ "$BUILD_DESKTOP" != "true" ] && [ "$BUILD_LINUX" != "true" ] && [ "$BUILD_ANDROID" != "true" ]; then
   fail "No platforms to build"
 fi
-# In the product's repository on GitHub only the desktop is built.
+# In the product's repository on GitHub only Windows and macOS are built.
 if [ "$OWN" = "true" ]; then
+  BUILD_LINUX="false"
   BUILD_ANDROID="false"
-  [ "$BUILD_DESKTOP" = "true" ] || fail "$TAG asks for no desktop platform: nothing for this repository to build (Android is built on Gitea)"
+  [ "$BUILD_DESKTOP" = "true" ] || fail "$TAG asks for neither Windows nor macOS: nothing for this repository to build (Linux and Android are built on Gitea)"
 fi
 # A matrix may not be empty; the job that reads it is skipped then.
 if [ "$include" = "[]" ]; then
@@ -187,6 +195,8 @@ if [ "$include" = "[]" ]; then
 fi
 # shellcheck disable=SC2086
 keys="$(echo $keys)"
+# shellcheck disable=SC2086
+draft_keys="$(echo $draft_keys)"
 MATRIX=$(jq -c '{include:.}' <<<"$include")
 
 echo "product=$PRODUCT  version=$VERSION  kind=$KIND  channel=$CHANNEL  platforms=$PLATFORMS  → $PUBLISH_REPO $RELEASE_TAG${FROM_TAG:+ from $FROM_TAG}" >&2
@@ -207,7 +217,9 @@ echo "product=$PRODUCT  version=$VERSION  kind=$KIND  channel=$CHANNEL  platform
   echo "prerelease=$PRERELEASE"
   echo "matrix=$MATRIX"
   echo "updater_keys=$keys"
+  echo "draft_keys=$draft_keys"
   echo "updater_pubkey=$UPDATER_PUBKEY"
   echo "build_desktop=$BUILD_DESKTOP"
+  echo "build_linux=$BUILD_LINUX"
   echo "build_android=$BUILD_ANDROID"
 } >> "$GITHUB_OUTPUT"

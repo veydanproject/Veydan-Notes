@@ -185,7 +185,7 @@ export function verify({ dir, prefix, version, keys, pubkey }) {
   const pub = parsePublicKey(pubkey ?? '');
   const names = fs.readdirSync(dir).sort();
   for (const n of names) {
-    if (n === 'latest.json') continue;
+    if (n === 'latest.json' || n === 'SHA256SUMS') continue;
     if (!(n.startsWith(`${prefix}_${version}_`) || n.startsWith(`${prefix}-${version}-`))) problems.push(`${n}: not a bundle of ${prefix} ${version}`);
   }
   for (const sig of names.filter((n) => n.endsWith('.sig'))) {
