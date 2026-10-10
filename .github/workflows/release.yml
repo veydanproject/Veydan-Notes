@@ -1,33 +1,29 @@
 name: Release
-run-name: >-
-  ${{ contains(github.ref_name, '-alpha.') && format('Alpha {0}', github.ref_name)
-      || contains(github.ref_name, '-beta.') && format('Beta {0}', github.ref_name)
-      || format('RC {0}', github.ref_name) }}
+run-name: ${{ contains(github.ref_name, '-rc.') && 'RC' || 'Release' }} ${{ github.ref_name }}
 
-# The desktop bundles of ONE product, built in the product's own public
-# repository on GitHub (docs/ci-cd.md, "Releases"). This file lives in the
-# monorepo and reaches the repository of each product with its snapshot
-# (products.json, publish.shared); nothing ever runs it in the monorepo.
+# The Windows and macOS bundles of ONE product, built in the product's own
+# public repository on GitHub (docs/ci-cd.md, "Releases"). This file lives
+# in the monorepo and reaches the repository of each product with its
+# snapshot (products.json, publish.shared); nothing ever runs it in the
+# monorepo.
 #
-#   make push <product> alpha|beta|rc [platforms]   (the owner, in the monorepo)
-#     → the snapshot of that commit under vX.Y.Z-<channel>.N[-<platform>]…
-#       in the product's repository: THIS workflow builds the desktop
-#       platforms the tag names (all three when none) and puts the
+#   make push <product> rc|release   (the owner, in the monorepo)
+#     → the release workflow of Gitea (veydanproject/release) publishes the
+#       snapshot of the tagged commit here under vX.Y.Z-rc.N or vX.Y.Z; THIS
+#       workflow builds Windows and macOS (two architectures) and puts the
 #       bundles and their updater signatures into a DRAFT release under the
-#       tag. It publishes nothing: the release workflow of Gitea
-#       (veydanproject/release) builds Android, waits for this draft,
-#       checks every signature, writes latest.json and publishes the
-#       prerelease.
-#   make push <product> release
-#     → the tag vX.Y.Z here, on the commit of the release candidate; it
-#       starts nothing: Gitea promotes the files of the candidate.
+#       tag. It publishes nothing: Gitea builds Linux and Android, waits for
+#       this draft, checks every signature, writes latest.json and publishes
+#       it — an rc as a pre-release, a release as the latest.
+#   make push <product> dev
+#     → a dev build, on Gitea alone: nothing comes here.
 #
 # The build jobs only build and sign; the draft is written with the run's
 # own token by the job `draft`, the only one with `contents: write`.
 on:
   push:
-    tags: ['v*-alpha.*', 'v*-beta.*', 'v*-rc.*']
-  # Again, by hand, on a channel tag.
+    tags: ['v*']
+  # Again, by hand, on a release tag.
   workflow_dispatch:
 
 # Read-only for every job; `draft` alone asks for more.

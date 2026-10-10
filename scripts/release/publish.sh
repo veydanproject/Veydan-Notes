@@ -24,6 +24,9 @@
 #   VERSION        X.Y.Z, the version of latest.json
 #   UPDATER_KEYS   the platforms of latest.json (linux-x86_64 …); empty: none
 #   ASSETS_DIR     the bundles and their signatures
+#   NOTES_FILE     the text of the release (scripts/release/notes.mjs body):
+#                  its description on GitHub and the notes of latest.json;
+#                  a line that points at the files when none is given
 #   GH_TOKEN       read by gh: a token that may write releases in REPO
 #
 # The release is created with every file at once and checked afterwards:
@@ -60,11 +63,18 @@ done
 
 if [ "$MODE" != "draft" ] && [ -n "$UPDATER_KEYS" ]; then
   node "$HERE/assets.mjs" latest --dir "$ASSETS_DIR" --prefix "$ASSET_PREFIX" --version "$VERSION" \
-    --keys "$UPDATER_KEYS" --base-url "https://github.com/$REPO/releases/download/$RELEASE_TAG"
+    --keys "$UPDATER_KEYS" --base-url "https://github.com/$REPO/releases/download/$RELEASE_TAG" \
+    ${NOTES_FILE:+--notes-file "$NOTES_FILE"}
   FILES+=("$ASSETS_DIR/latest.json")
 fi
 
-NOTES="See the assets below to download and install this version."
+NOTES_FILE="${NOTES_FILE:-}"
+if [ -n "$NOTES_FILE" ]; then
+  [ -s "$NOTES_FILE" ] || fail "NOTES_FILE=$NOTES_FILE: no text of the release"
+  NOTES_ARGS=(--notes-file "$NOTES_FILE")
+else
+  NOTES_ARGS=(--notes "See the assets below to download and install this version.")
+fi
 FLAGS=()
 PRERELEASE="false"
 case "$MODE" in
@@ -78,6 +88,7 @@ if gh release view "$RELEASE_TAG" --repo "$REPO" >/dev/null 2>&1; then
   echo ">> $REPO already has the release $RELEASE_TAG: its files are replaced"
   gh release upload "$RELEASE_TAG" "${FILES[@]}" --repo "$REPO" --clobber
   EDIT=(--title "$RELEASE_NAME")
+  [ -z "$NOTES_FILE" ] || EDIT+=(--notes-file "$NOTES_FILE")
   case "$MODE" in
     draft) EDIT+=(--draft=true --prerelease) ;;
     channel) EDIT+=(--draft=false --prerelease --latest=false) ;;
@@ -87,7 +98,7 @@ if gh release view "$RELEASE_TAG" --repo "$REPO" >/dev/null 2>&1; then
 else
   # --verify-tag: without the tag GitHub would make one on the default branch.
   gh release create "$RELEASE_TAG" "${FILES[@]}" --repo "$REPO" --verify-tag \
-    --title "$RELEASE_NAME" --notes "$NOTES" "${FLAGS[@]}"
+    --title "$RELEASE_NAME" "${NOTES_ARGS[@]}" "${FLAGS[@]}"
 fi
 
 # What the release really holds.

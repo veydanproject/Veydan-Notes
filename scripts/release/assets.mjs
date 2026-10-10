@@ -147,7 +147,7 @@ const UPDATER_BUNDLE = {
 };
 
 /** latest.json over the assets of `dir`: only bundles whose names start with the product's prefix. */
-export function latest({ dir, prefix, version, keys, baseUrl, now = new Date() }) {
+export function latest({ dir, prefix, version, keys, baseUrl, notes = null, now = new Date() }) {
   const names = fs.readdirSync(dir).sort();
   const own = names.filter((n) => n.startsWith(`${prefix}_`) || n.startsWith(`${prefix}-`));
   const platforms = {};
@@ -169,7 +169,7 @@ export function latest({ dir, prefix, version, keys, baseUrl, now = new Date() }
   }
   return {
     version,
-    notes: 'See the assets below to download and install this version.',
+    notes: notes ?? 'See the assets below to download and install this version.',
     pub_date: now.toISOString(),
     platforms,
   };
@@ -229,7 +229,9 @@ function main([command, ...rest]) {
     for (const n of names) console.log(n);
   } else if (command === 'latest') {
     need(opts, 'dir', 'prefix', 'version', 'keys', 'base-url');
-    const doc = latest({ dir: opts.dir, prefix: opts.prefix, version: opts.version, keys: opts.keys.split(/\s+/).filter(Boolean), baseUrl: opts['base-url'] });
+    // --notes-file: the text of the release (scripts/release/notes.mjs body), shown by the updater.
+    const notes = opts['notes-file'] ? fs.readFileSync(opts['notes-file'], 'utf8').trim() : null;
+    const doc = latest({ dir: opts.dir, prefix: opts.prefix, version: opts.version, keys: opts.keys.split(/\s+/).filter(Boolean), baseUrl: opts['base-url'], notes });
     fs.writeFileSync(path.join(opts.dir, 'latest.json'), `${JSON.stringify(doc, null, 2)}\n`);
     console.log(`latest.json: ${opts.version}, ${Object.keys(doc.platforms).join(' ')}`);
   } else if (command === 'verify') {
