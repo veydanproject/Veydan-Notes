@@ -86,6 +86,96 @@ mod tests {
         assert_eq!(table.len(), expected.len());
     }
 
+    /// What the windows besides `main` reach (platform-spec 5.2): each
+    /// command a grant names is a line of `commands.golden.txt`, quick
+    /// capture reaches exactly what writes a note into a folder besides the
+    /// shell's shared set, and neither window reaches what `main` alone does.
+    #[test]
+    fn the_windows_besides_main_reach_commands_of_the_golden_file_alone() {
+        let golden: Vec<&str> = include_str!("commands.golden.txt")
+            .lines()
+            .filter_map(|line| {
+                let mut words = line.split(' ');
+                let (command, _, platform) = (words.next()?, words.next()?, words.next()?);
+                (cfg!(desktop) || platform == "all").then_some(command)
+            })
+            .collect();
+        let windows = veydan_shell::window_table(product(), module_list()).unwrap();
+        for (window, command) in &windows {
+            assert!(
+                golden.contains(command),
+                "{window} {command}: not in the golden file"
+            );
+        }
+        let of = |label: &str| -> Vec<&str> {
+            windows
+                .iter()
+                .filter(|(window, _)| *window == label)
+                .map(|(_, command)| *command)
+                .collect()
+        };
+        #[cfg(desktop)]
+        {
+            assert_eq!(
+                of("quick-capture"),
+                [
+                    "app_start_error",
+                    "clipboard_write_text",
+                    "host_info",
+                    "labels_resolve",
+                    "lock_recover",
+                    "lock_recover_keep",
+                    "lock_recovery_check",
+                    "lock_status",
+                    "lock_touch",
+                    "lock_unlock",
+                    "media_grant_access",
+                    "modules_list",
+                    "note_add_folder",
+                    "note_create",
+                    "note_folder_list",
+                    "open_url",
+                    "sync_status",
+                    "window_minimize",
+                ]
+            );
+            let notes = of("notes");
+            let table = veydan_shell::command_table(product(), module_list()).unwrap();
+            for (command, module) in &table {
+                if *module == "notes" {
+                    assert!(notes.contains(command), "the notes window lacks {command}");
+                }
+            }
+            assert!(notes.contains(&"lock_lock") && notes.contains(&"sync_run_now"));
+        }
+        // No window but main is named on a phone: the shared set alone.
+        #[cfg(mobile)]
+        assert!(of("notes").is_empty() && of("quick-capture").is_empty());
+        for main_only in [
+            "lock_set",
+            "lock_timeout_set",
+            "lock_recovery_regenerate",
+            "vault_replaced_keys",
+            "vault_replaced_keys_open",
+            "demo_seed",
+            "app_clear_data",
+            "sync_set_config",
+            "sync_create_vault",
+            "sync_join_vault",
+            "sync_leave",
+            "sync_change_passphrase",
+            "update_check",
+            "update_open",
+            "modules_set_enabled",
+            "modules_choose",
+            "tray_settings_set",
+            "app_locale_set",
+        ] {
+            let reached: Vec<_> = windows.iter().filter(|(_, c)| *c == main_only).collect();
+            assert!(reached.is_empty(), "{reached:?}");
+        }
+    }
+
     /// The default plan takes everything the module and the shell register,
     /// in the order of 9.1: the system rows and the catalog of the notes,
     /// the attachments and the notes themselves, the flags of a note after
