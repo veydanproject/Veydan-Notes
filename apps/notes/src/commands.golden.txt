@@ -90,7 +90,7 @@ notes_attachment_policy_set notes all
 notes_get_dir notes desktop
 notes_set_dir notes desktop
 open_quick_capture notes desktop
-open_url shell desktop
+open_url shell all
 sync_attachment_cancel notes all
 sync_change_passphrase shell all
 sync_change_storage shell all
