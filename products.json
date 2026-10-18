@@ -36,6 +36,23 @@
         "ja": "エンドツーエンドで暗号化された同期を備えたノート。",
         "ko": "종단간 암호화 동기화를 지원하는 노트."
       },
+      "slogan": {
+        "en": "Notes that belong to you.",
+        "ru": "Заметки, которые принадлежат вам.",
+        "uk": "Нотатки, які належать вам.",
+        "de": "Notizen, die dir gehören.",
+        "es": "Notas que te pertenecen.",
+        "fr": "Des notes qui vous appartiennent.",
+        "it": "Note che ti appartengono.",
+        "pl": "Notatki, które należą do ciebie.",
+        "pt-BR": "Notas que pertencem a você.",
+        "tr": "Size ait notlar.",
+        "id": "Catatan yang menjadi milik Anda.",
+        "vi": "Ghi chú thuộc về bạn.",
+        "zh-CN": "属于你的笔记。",
+        "ja": "あなただけのノート。",
+        "ko": "온전히 당신의 것인 노트."
+      },
       "modules": [
         "notes"
       ],
