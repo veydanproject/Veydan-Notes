@@ -5233,8 +5233,6 @@ dependencies = [
 [[package]]
 name = "tao"
 version = "0.35.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1c93047acf68669466a34690ac58cca7010bd1b201e1ec86f1fd0a75d3dd4a9"
 dependencies = [
  "bitflags 2.13.0",
  "block2",
@@ -6366,7 +6364,7 @@ dependencies = [
  "veydan-shell",
  "veydan-sync",
  "veydan-sync-host",
- "zip 9.0.4",
+ "zip 9.0.5",
  "zstd",
 ]
 
@@ -6380,6 +6378,7 @@ dependencies = [
  "ksni",
  "objc2",
  "objc2-foundation",
+ "objc2-ui-kit",
  "oslog",
  "semver",
  "serde",
@@ -7610,9 +7609,9 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.0.4"
+version = "9.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a954114b47a54df49f83d2722814e86b23d4bb1b54a1b90fb7d92b41619ddc22"
+checksum = "6e04976da629d3b04204ba8105b396a193af8ad2583b2c79bfb3ab8af580a11e"
 dependencies = [
  "aes",
  "bzip2",
